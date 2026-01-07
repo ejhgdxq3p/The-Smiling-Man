@@ -1,0 +1,35 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #000; /* Pre-load black */
+}
+
+#game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background-color: #0055EA; /* Main Blue */
+    cursor: none; /* Hide system cursor, we draw our own */
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated; /* Essential for pixel art style */
+}
+
+#ui-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    font-family: 'Courier New', Courier, monospace; /* Fallback pixel-ish font */
+    color: #FFFFFF;
+    text-shadow: 1px 1px #002266;
+}
