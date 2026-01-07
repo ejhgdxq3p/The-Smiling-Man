@@ -1,0 +1,29 @@
+name: Deploy to itch.io
+
+# 触发条件：每次推送到 main 分支时触发
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 检出代码
+      - uses: actions/checkout@v4
+
+      # 2. 打包文件 (因为你是原生 HTML/JS，直接压缩即可)
+      # 注意：确保 index.html 在根目录！
+      - name: Zip Game
+        run: zip -r game.zip . -x ".git/*" ".github/*" "*.md"
+
+      # 3. 使用 Butler 推送到 itch.io
+      - uses: manleydev/butler-publish-itchio-action@master
+        env:
+          BUTLER_CREDENTIALS: ${{ secrets.ITCHIO_API_KEY }}
+          CHANNEL: html5
+          ITCH_GAME: the-smiling-man  # 【修改这里】你的 itch.io 项目URL里的名字
+          ITCH_USER: ejhgdxq3p    # 【修改这里】你的 itch.io 用户名
+          PACKAGE: game.zip
+          VERSION: ${{ github.run_number }}
