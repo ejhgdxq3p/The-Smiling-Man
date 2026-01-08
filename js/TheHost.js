@@ -3,7 +3,7 @@
  * A cosmic horror entity with a smiling face and rotating corona
  */
 
-import { COLORS } from './Game.js';
+import { COLORS } from './Constants.js';
 
 export class TheHost {
     constructor(x, y, assets) {

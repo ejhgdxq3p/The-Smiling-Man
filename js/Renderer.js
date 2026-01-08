@@ -2,7 +2,7 @@
  * Renderer - Handles visual effects and rendering utilities
  */
 
-import { COLORS, RENDER_WIDTH, RENDER_HEIGHT } from './Game.js';
+import { COLORS, RENDER_WIDTH, RENDER_HEIGHT } from './Constants.js';
 
 export class Renderer {
     constructor(ctx, assets) {

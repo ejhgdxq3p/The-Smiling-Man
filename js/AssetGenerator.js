@@ -2,7 +2,7 @@
  * AssetGenerator - Procedurally generates all pixel art assets
  */
 
-import { COLORS } from './Game.js';
+import { COLORS } from './Constants.js';
 
 export class AssetGenerator {
     constructor() {

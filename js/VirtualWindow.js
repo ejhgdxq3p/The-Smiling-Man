@@ -2,7 +2,7 @@
  * VirtualWindow - A draggable, resizable window that contains its own physics world
  */
 
-import { COLORS, RENDER_WIDTH, RENDER_HEIGHT } from './Game.js';
+import { COLORS, RENDER_WIDTH, RENDER_HEIGHT } from './Constants.js';
 
 const TITLE_BAR_HEIGHT = 20;
 const BORDER_WIDTH = 3;
@@ -52,6 +52,14 @@ export class VirtualWindow {
         
         // Stage timer
         this.stageTimer = 0;
+        
+        // Visual effects
+        this.flashColor = null;
+        this.flashTimer = 0;
+        
+        // Special flags
+        this.contentAlpha = 1.0; 
+        this.isIntroWindow = false;
     }
     
     spawnIn(world) {
@@ -61,6 +69,19 @@ export class VirtualWindow {
         
         // Create boundary walls
         this.updateWalls();
+    }
+    
+    destroy(world) {
+        // Remove all objects
+        for (const obj of this.objects) {
+            Matter.Composite.remove(this.composite, obj);
+        }
+        // Remove walls
+        for (const wall of this.walls) {
+            Matter.Composite.remove(this.composite, wall);
+        }
+        // Remove composite
+        Matter.Composite.remove(world, this.composite);
     }
     
     updateWalls() {
@@ -318,9 +339,27 @@ export class VirtualWindow {
         // Walls will push them if needed
     }
     
+    flashBorder(color) {
+        this.flashColor = color;
+        this.flashTimer = 0;
+    }
+
     render(ctx) {
         // Draw window frame (XP style, pixelated)
         this.drawWindowFrame(ctx);
+        
+        // Handle flashing
+        if (this.flashColor) {
+            this.flashTimer += 16; // approx 1 frame
+            if (Math.floor(this.flashTimer / 200) % 2 === 0) {
+                ctx.strokeStyle = this.flashColor;
+                ctx.lineWidth = 4;
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
+            }
+            if (this.flashTimer > 2000) {
+                this.flashColor = null;
+            }
+        }
         
         // Clip content area
         ctx.save();
@@ -333,18 +372,39 @@ export class VirtualWindow {
         );
         ctx.clip();
         
-        // Draw background
-        ctx.fillStyle = this.bgColor;
-        ctx.fillRect(
-            this.x + BORDER_WIDTH,
-            this.y + TITLE_BAR_HEIGHT,
-            this.width - BORDER_WIDTH * 2,
-            this.height - TITLE_BAR_HEIGHT - BORDER_WIDTH
-        );
+        // Draw background logic
+        // If it's the intro window, we want to see THROUGH it to the cover
+        // So we use globalCompositeOperation or just transparency
         
-        // Draw grid for lunar type
-        if (this.type === 'lunar') {
-            this.drawGrid(ctx);
+        if (this.isIntroWindow) {
+            ctx.clearRect(
+                this.x + BORDER_WIDTH,
+                this.y + TITLE_BAR_HEIGHT,
+                this.width - BORDER_WIDTH * 2,
+                this.height - TITLE_BAR_HEIGHT - BORDER_WIDTH
+            );
+            
+            // Draw a semi-transparent white overlay that fades out as expanded
+            ctx.fillStyle = `rgba(255, 255, 255, ${this.contentAlpha})`;
+            ctx.fillRect(
+                this.x + BORDER_WIDTH,
+                this.y + TITLE_BAR_HEIGHT,
+                this.width - BORDER_WIDTH * 2,
+                this.height - TITLE_BAR_HEIGHT - BORDER_WIDTH
+            );
+        } else {
+            // Normal game window
+            ctx.fillStyle = this.bgColor;
+            ctx.fillRect(
+                this.x + BORDER_WIDTH,
+                this.y + TITLE_BAR_HEIGHT,
+                this.width - BORDER_WIDTH * 2,
+                this.height - TITLE_BAR_HEIGHT - BORDER_WIDTH
+            );
+            
+            if (this.type === 'lunar') {
+                this.drawGrid(ctx);
+            }
         }
         
         // Draw objects

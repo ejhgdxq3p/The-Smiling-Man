@@ -2,7 +2,7 @@
  * DialogueSystem - Typewriter-style dialogue display
  */
 
-import { COLORS, RENDER_WIDTH, RENDER_HEIGHT } from './Game.js';
+import { COLORS, RENDER_WIDTH, RENDER_HEIGHT } from './Constants.js';
 
 export class DialogueSystem {
     constructor(ctx) {
@@ -33,6 +33,18 @@ export class DialogueSystem {
     }
     
     typeText(text, duration = 3000) {
+        // If immediate update is needed (like percentage), clear current
+        if (text.includes('%')) {
+             this.currentText = text;
+             this.displayedText = text; // Skip typing effect
+             this.charIndex = text.length;
+             this.isTyping = true;
+             this.displayDuration = duration;
+             this.displayTimer = 0;
+             this.fadeAlpha = 1;
+             return Promise.resolve();
+        }
+
         return new Promise((resolve) => {
             this.queue.push({ text, duration, resolve });
             if (!this.isTyping && this.queue.length === 1) {
