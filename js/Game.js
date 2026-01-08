@@ -26,7 +26,7 @@ export class Game {
         this.propEditor = null;
         
         // Game state
-        this.state = 'intro'; // intro, stage1, stage2, stage3, finale, crash
+        this.state = 'intro'; 
         this.hostMood = 0; 
         this.failCount = 0;
         
@@ -63,7 +63,7 @@ export class Game {
         // Generate/Load assets
         this.assets = new AssetGenerator();
         await this.assets.generate();
-        await this.loadCover(); // Load cover image
+        await this.loadCover(); 
         
         // Initialize subsystems
         this.renderer = new Renderer(this.ctx, this.assets);
@@ -76,13 +76,19 @@ export class Game {
         this.setupInput();
         this.setupCollisions();
         
-        // Audio init
         this.canvas.addEventListener('click', () => {
             this.audio.init();
         }, { once: true });
         
+        // Add keyboard listener for cinematic skip
+        window.addEventListener('keydown', () => {
+            if (this.state === 'cinematic') {
+                this.director.closeCinematic();
+            }
+        });
+        
         // Start Game Flow
-        this.startIntro();
+        this.director.startCinematic();
         
         this.lastTime = performance.now();
         requestAnimationFrame((t) => this.gameLoop(t));
@@ -108,18 +114,15 @@ export class Game {
     startIntro() {
         this.state = 'intro';
         this.host.visible = false; 
+        this.host.faceScale = 1.0; // Reset scale after cinematic
+        this.host.coronaScale = 1.0;
         
-        // Create INIT window
-        // Force fully opaque white background initially
         const win = new VirtualWindow(
             RENDER_WIDTH / 2 - 50, RENDER_HEIGHT / 2 - 40, 100, 80,
             'INIT.exe', 'lunar', this
         );
         win.bgColor = COLORS.SYSTEM_WHITE;
-        
-        // Custom property to make it transparent later
         win.isIntroWindow = true; 
-        
         win.spawnIn(this.world);
         this.windows = [win];
         
@@ -130,13 +133,11 @@ export class Game {
         this.state = 'stage1';
         this.host.visible = true; 
         
-        // DESTROY intro window completely
         if (this.windows[0]) {
-             this.windows[0].destroy(this.world); // We need to add destroy method
+             this.windows[0].destroy(this.world); 
         }
         this.windows = [];
         
-        // Create NEW Station window
         const winA = new VirtualWindow(
             100, 80, 200, 150,
             'STATION.exe',
@@ -146,7 +147,6 @@ export class Game {
         winA.spawnIn(this.world);
         this.windows.push(winA);
         
-        // Spawn mass object
         setTimeout(() => {
             winA.spawnObject('mass', 'cube');
         }, 1000);
@@ -154,12 +154,9 @@ export class Game {
     
     startStage2() {
         this.state = 'stage2';
-        
-        // Unlock property editor
         this.propEditor.unlock();
         this.dialogue.typeText("System Privileges: ESCALATED (Right-Click Enabled)", 4000);
         
-        // Create Window B (Void)
         const winB = new VirtualWindow(
             340, 50, 200, 150,
             'VOID.exe',
@@ -169,7 +166,6 @@ export class Game {
         winB.spawnIn(this.world);
         this.windows.push(winB);
         
-        // Spawn void object
         setTimeout(() => {
             winB.spawnObject('void', 'sphere');
             this.dialogue.typeText("This is Eternity. No direction. Catch it.", 3000);
@@ -194,7 +190,11 @@ export class Game {
         const ctx = this.ctx;
         
         // Background
-        ctx.fillStyle = COLORS.BACKGROUND_BLUE;
+        if (this.state === 'cinematic') {
+            ctx.fillStyle = '#000000'; // Black for cinematic
+        } else {
+            ctx.fillStyle = COLORS.BACKGROUND_BLUE;
+        }
         ctx.fillRect(0, 0, RENDER_WIDTH, RENDER_HEIGHT);
         
         // 1. Cover (only in intro)
@@ -215,12 +215,16 @@ export class Game {
             this.renderer.applyGlitch();
         }
         
-        this.dialogue.render();
+        // Cinematic Text
+        if (this.state === 'cinematic') {
+            this.renderer.drawCinematicText(); // Draw CMD Window first
+            this.host.render(ctx); // Draw Host ON TOP of the CMD window
+        } else {
+            this.dialogue.render(); 
+        }
+        
         this.renderer.drawCursor(this.mouse.x, this.mouse.y);
     }
-
-    // --- Standard Methods (Input, Collision, Loop) ---
-    // (Kept largely the same, just removed old logic)
 
     setupInput() {
         const getScaledMouse = (e) => {
@@ -245,6 +249,18 @@ export class Game {
             if (e.button !== 0) return;
             const pos = getScaledMouse(e);
             this.mouse.down = true;
+            
+            // Interaction for Cinematic Close Button
+            if (this.state === 'cinematic' && this.renderer.closeBtnRect) {
+                const btn = this.renderer.closeBtnRect;
+                if (pos.x >= btn.x && pos.x <= btn.x + btn.w &&
+                    pos.y >= btn.y && pos.y <= btn.y + btn.h) {
+                    
+                    this.director.closeCinematic();
+                    return;
+                }
+            }
+            
             for (let i = this.windows.length - 1; i >= 0; i--) {
                 const win = this.windows[i];
                 if (win.hitTestResize(pos.x, pos.y)) {
@@ -255,10 +271,8 @@ export class Game {
                     return;
                 }
                 if (win.hitTestTitleBar(pos.x, pos.y)) {
-                    // Cheat skip still available
                     win.clickCount = (win.clickCount || 0) + 1;
                     if (win.clickCount > 5) { this.director.forceSkip(); win.clickCount = 0; }
-                    
                     this.dragTarget = win;
                     win.startDrag(pos.x, pos.y);
                     this.windows.splice(i, 1);
@@ -376,21 +390,22 @@ export class Game {
         const toTransfer = [];
         for (const obj of fromWin.objects) {
             const pos = obj.position;
+            // Check if object center is in overlap region
+            // Simplified check: Allow transfer if center is inside overlap
             if (pos.x >= overlap.x && pos.x <= overlap.x + overlap.width &&
                 pos.y >= overlap.y && pos.y <= overlap.y + overlap.height) {
-                const toCenterX = (toWin.x + toWin.width / 2) - pos.x;
-                const toCenterY = (toWin.y + toWin.height / 2) - pos.y;
-                if (obj.velocity.x * toCenterX + obj.velocity.y * toCenterY > 0) toTransfer.push(obj);
+                
+                // Avoid rapid oscillation: Check if it's already compatible with target?
+                // Or just move it.
+                if (obj.windowType !== toWin.type) {
+                     toTransfer.push(obj);
+                     
+                     // Play transfer sound
+                     this.dialogue.typeText(`Transfer: ${fromWin.type} -> ${toWin.type}`, 1000);
+                }
             }
         }
         for (const obj of toTransfer) fromWin.transferObject(obj, toWin);
-    }
-
-    removeBodyFromWindows(body) {
-        for (const win of this.windows) {
-            const idx = win.objects.indexOf(body);
-            if (idx !== -1) win.objects.splice(idx, 1);
-        }
     }
     
     gameLoop(currentTime) {

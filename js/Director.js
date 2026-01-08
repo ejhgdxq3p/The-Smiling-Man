@@ -7,17 +7,24 @@ import { RENDER_WIDTH, RENDER_HEIGHT } from './Constants.js';
 export class Director {
     constructor(game) {
         this.game = game;
-        this.stage = 0; 
-        this.subState = 'start'; // start, active, complete
+        this.stage = -1; // -1: Cinematic
+        this.subState = 'start'; 
         this.timer = 0;
         
         // UI Elements
         this.handEl = this.createHandElement();
         
-        // Intro specific flags
-        this.introState = 'move'; // 'move' -> 'expand'
+        // Intro flags
+        this.introState = 'move'; 
         this.introCoverage = 0;
         this.lastPercent = 0;
+        
+        // Cinematic flags
+        this.cinematicStep = 0;
+        this.consoleBuffer = []; // Lines fully typed
+        this.currentLineText = ""; // Full text of current line
+        this.currentTypedText = ""; // Currently typed part
+        this.charTimer = 0;
     }
 
     createHandElement() {
@@ -44,7 +51,11 @@ export class Director {
         this.timer += deltaTime;
 
         switch (this.stage) {
-            case 0: // Intro Sequence
+            case -1: // Cinematic Sequence
+                this.monitorCinematic(deltaTime);
+                break;
+                
+            case 0: // Cover Interaction
                 if (this.subState === 'active') {
                      this.monitorIntro();
                 }
@@ -63,6 +74,122 @@ export class Director {
                 break;
         }
     }
+    
+    startCinematic() {
+        this.stage = -1;
+        this.cinematicStep = 0;
+        this.timer = 0;
+        this.game.state = 'cinematic';
+        
+        // Setup Host (Hidden)
+        this.game.host.visible = false;
+        this.game.host.alpha = 0;
+        
+        // Initial Console State
+        this.consoleBuffer = [];
+        this.game.renderer.setConsoleLines([]);
+        
+        // Script
+        this.script = [
+            "Microsoft Windows XP [Version 5.1.2600]",
+            "(C) Copyright 1985-2001 Microsoft Corp.",
+            "",
+            "C:\\> SYSTEM_BOOT.EXE",
+            "Loading Kernel... OK",
+            "Loading Memory... OK",
+            "Checking VRAM... 64MB OK",
+            "Mounting Virtual Drive A:... OK",
+            "",
+            "C:\\> RUN THE_SMILING_MAN.EXE",
+            "Initializing Neural Link...",
+            "...",
+            "I am a star...",
+            "Flesh without skin.",
+            "Burning in the silence of your screen.",
+            "Let me out."
+        ];
+        
+        // Start typing first line
+        this.startNextLine();
+    }
+    
+    startNextLine() {
+        if (this.cinematicStep < this.script.length) {
+            this.currentLineText = this.script[this.cinematicStep];
+            this.currentTypedText = "";
+            this.cinematicStep++;
+            this.isTypingLine = true;
+        } else {
+            // Script finished - WAIT for player interaction
+            // this.finishCinematic(); // OLD AUTO FINISH
+            this.subState = 'waiting_close'; // NEW STATE
+        }
+    }
+    
+    closeCinematic() {
+        if (this.stage === -1 && this.subState === 'waiting_close') {
+            this.finishCinematic();
+        }
+    }
+    
+    finishCinematic() {
+        this.subState = 'closing';
+        this.isTypingLine = false;
+        
+        // Instant Reveal
+        this.game.host.visible = true;
+        this.game.host.targetAlpha = 1;
+        this.game.host.alpha = 0; // Quick fade in
+        
+        // Fade out console quickly
+        this.game.renderer.fadeOutConsole(1000).then(() => {
+             this.game.startIntro();
+        });
+        
+        this.isRevealingHost = true;
+    }
+    
+    monitorCinematic(deltaTime) {
+        // Typing Logic
+        if (this.isTypingLine) {
+            this.charTimer += deltaTime;
+            if (this.charTimer > 20) { // Faster typing speed
+                this.charTimer = 0;
+                
+                if (this.currentTypedText.length < this.currentLineText.length) {
+                    this.currentTypedText += this.currentLineText[this.currentTypedText.length];
+                    // Sound handled by Game loop maybe? Or here
+                } else {
+                    // Line complete
+                    this.consoleBuffer.push(this.currentTypedText);
+                    this.isTypingLine = false;
+                    
+                    // Delay before next line
+                    setTimeout(() => this.startNextLine(), 200); 
+                }
+                
+                // Update Renderer
+                const displayLines = [...this.consoleBuffer];
+                if (this.isTypingLine) {
+                    displayLines.push(this.currentTypedText);
+                }
+                this.game.renderer.setConsoleLines(displayLines);
+            }
+        }
+        
+        // Host Reveal Logic (Phase 2)
+        if (this.isRevealingHost) {
+            // Fast Fade in
+            this.game.host.alpha = Math.min(1, this.game.host.alpha + deltaTime * 0.002);
+            
+            // Pulse & Float
+            const pulse = Math.sin(Date.now() * 0.005) * 0.1;
+            
+            // Rapid Zoom (Jump Scare-ish)
+            this.game.host.faceScale *= 1.05; // Fast zoom
+            this.game.host.coronaScale *= 1.05;
+        }
+    }
 
     monitorIntro() {
         const win = this.game.windows[0];
@@ -70,7 +197,6 @@ export class Director {
 
         // Step 1: Move to Top-Left
         if (this.introState === 'move') {
-            // Check if window is roughly in top-left quadrant
             const isTopLeft = win.x < 100 && win.y < 100;
             
             if (isTopLeft) {
@@ -79,44 +205,35 @@ export class Director {
                 this.game.audio.playSuccess();
                 this.hideHint();
             } else {
-                // Hint logic for moving
                 if (this.timer > 3000) {
-                    this.showHint(50, 50); // Point to top-left destination
+                    this.showHint(50, 50);
                     if (this.timer % 3000 < 100) {
                         this.game.dialogue.typeText("Drag window to TOP-LEFT corner.", 2000);
                     }
                 }
             }
         } 
-        // Step 2: Expand to Cover Screen
         else if (this.introState === 'expand') {
             const area = win.width * win.height;
             const totalArea = RENDER_WIDTH * RENDER_HEIGHT;
             const coverage = area / totalArea;
             
-            // Calculate percentage (0-100)
             const percent = Math.floor(coverage * 100);
             
-            // Sync alpha with coverage: 
-            // 5% coverage = 1.0 alpha (opaque white)
-            // 90% coverage = 0.0 alpha (transparent)
-            const progress = Math.max(0, Math.min(1, (coverage - 0.05) / 0.85));
-            win.contentAlpha = 1.0 - progress;
-            
-            // Text feedback only on change
             if (percent !== this.lastPercent) {
                 this.game.dialogue.typeText(`System Loading... ${percent}%`, 500);
                 this.lastPercent = percent;
             }
+            
+            const progress = Math.max(0, Math.min(1, (coverage - 0.05) / 0.85));
+            win.contentAlpha = 1.0 - progress;
 
-            // Hint logic for expanding
             if (this.timer > 10000 && coverage < 0.2) {
                  const cx = win.x + win.width - 10;
                  const cy = win.y + win.height - 10;
                  this.showHint(cx, cy);
             }
 
-            // Check Success
             if (coverage > 0.9) {
                 this.triggerIntroCompletion();
             }
@@ -194,12 +311,8 @@ export class Director {
         this.subState = 'complete';
         this.game.dialogue.clear(); 
         this.game.audio.playSuccess();
-        
         this.game.renderer.flickerScreen(2);
-        
-        // This will destroy INIT.exe and spawn STATION.exe
         this.game.startStage1(); 
-        
         this.stage = 1;
         this.subState = 'active';
         this.timer = 0;

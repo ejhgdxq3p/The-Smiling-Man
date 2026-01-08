@@ -83,134 +83,46 @@ export class TheHost {
         const drawX = this.x + this.glitchOffset.x;
         const drawY = this.y + this.glitchOffset.y;
         
-        // Draw corona (behind face)
+        // Draw corona (BEHIND face)
         this.renderCorona(ctx, drawX, drawY);
         
-        // Draw face
+        // Draw face (FRONT)
         this.renderFace(ctx, drawX, drawY);
         
         ctx.restore();
     }
     
     renderCorona(ctx, x, y) {
+        const img = this.assets.coronaImage;
+        if (!img) return;
+
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(this.coronaAngle);
-        ctx.scale(this.coronaScale * (this.jumpScare ? this.jumpScareScale : 1), 
-                  this.coronaScale * (this.jumpScare ? this.jumpScareScale : 1));
         
-        if (this.assets.coronaImage) {
-            const size = 180;
-            ctx.drawImage(this.assets.coronaImage, -size/2, -size/2, size, size);
-        } else {
-            // Fallback: draw procedural corona
-            this.drawProceduralCorona(ctx);
-        }
+        const scale = this.coronaScale * (this.jumpScare ? this.jumpScareScale : 1) * 0.6; // Scale down a bit to fit screen
+        ctx.scale(scale, scale);
+        
+        // Draw centered
+        ctx.drawImage(img, -img.width / 2, -img.height / 2);
         
         ctx.restore();
     }
     
     renderFace(ctx, x, y) {
+        const img = this.assets.faceImage;
+        if (!img) return;
+
         ctx.save();
         ctx.translate(x, y + this.faceOffsetY);
-        const scale = this.faceScale * (this.jumpScare ? this.jumpScareScale : 1);
+        
+        const scale = this.faceScale * (this.jumpScare ? this.jumpScareScale : 1) * 0.6;
         ctx.scale(scale, scale);
         
-        if (this.assets.faceImage) {
-            const size = 80;
-            ctx.drawImage(this.assets.faceImage, -size/2, -size/2, size, size);
-        } else {
-            // Fallback: draw procedural face
-            this.drawProceduralFace(ctx);
-        }
+        // Draw centered
+        ctx.drawImage(img, -img.width / 2, -img.height / 2);
         
         ctx.restore();
-    }
-    
-    drawProceduralCorona(ctx) {
-        ctx.fillStyle = COLORS.SYSTEM_WHITE;
-        
-        // Draw gear-like corona with saw teeth
-        const innerRadius = 50;
-        const outerRadius = 90;
-        const teeth = 24;
-        
-        ctx.beginPath();
-        for (let i = 0; i < teeth; i++) {
-            const angle1 = (i / teeth) * Math.PI * 2;
-            const angle2 = ((i + 0.5) / teeth) * Math.PI * 2;
-            
-            const x1 = Math.cos(angle1) * innerRadius;
-            const y1 = Math.sin(angle1) * innerRadius;
-            const x2 = Math.cos(angle2) * outerRadius;
-            const y2 = Math.sin(angle2) * outerRadius;
-            
-            if (i === 0) {
-                ctx.moveTo(x1, y1);
-            }
-            ctx.lineTo(x2, y2);
-            
-            const angle3 = ((i + 1) / teeth) * Math.PI * 2;
-            const x3 = Math.cos(angle3) * innerRadius;
-            const y3 = Math.sin(angle3) * innerRadius;
-            ctx.lineTo(x3, y3);
-        }
-        ctx.closePath();
-        ctx.fill();
-        
-        // Cut out center
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.beginPath();
-        ctx.arc(0, 0, innerRadius - 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalCompositeOperation = 'source-over';
-    }
-    
-    drawProceduralFace(ctx) {
-        ctx.fillStyle = COLORS.SYSTEM_WHITE;
-        
-        // Face outline (oval)
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 35, 45, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Eyes (dark voids)
-        ctx.fillStyle = COLORS.BACKGROUND_BLUE;
-        
-        // Left eye
-        ctx.beginPath();
-        ctx.ellipse(-12, -10, 6, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Right eye
-        ctx.beginPath();
-        ctx.ellipse(12, -10, 6, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Smiling mouth
-        ctx.strokeStyle = COLORS.BACKGROUND_BLUE;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(0, 8, 18, 0.2, Math.PI - 0.2);
-        ctx.stroke();
-        
-        // Nose (simple line)
-        ctx.beginPath();
-        ctx.moveTo(0, -5);
-        ctx.lineTo(0, 5);
-        ctx.stroke();
-        
-        // Add creepy details
-        if (this.mood > 30) {
-            // Cracks
-            ctx.strokeStyle = COLORS.SHADOW_BLUE;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(-20, -30);
-            ctx.lineTo(-15, -15);
-            ctx.lineTo(-18, 0);
-            ctx.stroke();
-        }
     }
     
     setMood(value) {

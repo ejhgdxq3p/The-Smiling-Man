@@ -12,8 +12,13 @@ export class Renderer {
         // Effects state
         this.glitchIntensity = 0;
         this.flickerAlpha = 0;
-        this.scanlineOffset = 0;
+        
+        // Console / Terminal State
+        this.consoleLines = []; 
+        this.consoleAlpha = 1;  
     }
+    
+    // ... (Keep existing flicker/glitch methods) ...
     
     async flickerScreen(count) {
         for (let i = 0; i < count; i++) {
@@ -50,61 +55,25 @@ export class Renderer {
     
     applyGlitch() {
         if (this.glitchIntensity <= 0) return;
-        
         const ctx = this.ctx;
         const intensity = this.glitchIntensity;
-        
-        // Random horizontal shifts
         const sliceCount = Math.floor(5 + intensity * 10);
         const sliceHeight = RENDER_HEIGHT / sliceCount;
-        
         for (let i = 0; i < sliceCount; i++) {
             if (Math.random() < intensity * 0.3) {
                 const y = i * sliceHeight;
                 const offset = (Math.random() - 0.5) * intensity * 20;
-                
-                // Get image data and shift
                 try {
                     const imageData = ctx.getImageData(0, y, RENDER_WIDTH, sliceHeight);
                     ctx.putImageData(imageData, offset, y);
-                } catch (e) {
-                    // Security error on some browsers
-                }
+                } catch (e) {}
             }
-        }
-        
-        // Color channel separation
-        if (intensity > 0.5) {
-            ctx.globalCompositeOperation = 'lighter';
-            ctx.globalAlpha = intensity * 0.2;
-            ctx.fillStyle = '#FF0000';
-            ctx.fillRect(2, 0, RENDER_WIDTH, RENDER_HEIGHT);
-            ctx.fillStyle = '#0000FF';
-            ctx.fillRect(-2, 0, RENDER_WIDTH, RENDER_HEIGHT);
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.globalAlpha = 1;
-        }
-        
-        // Scanlines
-        this.drawScanlines(intensity);
-    }
-    
-    drawScanlines(intensity = 0.3) {
-        const ctx = this.ctx;
-        ctx.fillStyle = `rgba(0, 0, 0, ${intensity * 0.2})`;
-        
-        for (let y = 0; y < RENDER_HEIGHT; y += 2) {
-            ctx.fillRect(0, y, RENDER_WIDTH, 1);
         }
     }
     
     drawCursor(x, y) {
         const ctx = this.ctx;
-        
-        // Simple pixel cursor
         ctx.fillStyle = COLORS.SYSTEM_WHITE;
-        
-        // Arrow shape
         ctx.beginPath();
         ctx.moveTo(x, y);
         ctx.lineTo(x, y + 12);
@@ -115,53 +84,112 @@ export class Renderer {
         ctx.lineTo(x + 10, y + 8);
         ctx.closePath();
         ctx.fill();
-        
-        // Outline
         ctx.strokeStyle = COLORS.SHADOW_BLUE;
         ctx.lineWidth = 1;
         ctx.stroke();
     }
-    
-    drawDitheredRect(x, y, w, h, color1, color2, density = 0.5) {
-        const ctx = this.ctx;
-        
-        // Fill base color
-        ctx.fillStyle = color1;
-        ctx.fillRect(x, y, w, h);
-        
-        // Apply Bayer dithering
-        ctx.fillStyle = color2;
-        const bayerMatrix = [
-            [0, 8, 2, 10],
-            [12, 4, 14, 6],
-            [3, 11, 1, 9],
-            [15, 7, 13, 5]
-        ];
-        
-        const threshold = density * 16;
-        
-        for (let py = 0; py < h; py++) {
-            for (let px = 0; px < w; px++) {
-                const bayerValue = bayerMatrix[py % 4][px % 4];
-                if (bayerValue < threshold) {
-                    ctx.fillRect(x + px, y + py, 1, 1);
-                }
-            }
-        }
+
+    setConsoleLines(lines) {
+        this.consoleLines = lines;
     }
     
-    drawPixelText(text, x, y, color = COLORS.SYSTEM_WHITE, size = 8) {
+    fadeOutConsole(duration) {
+        const startTime = Date.now();
+        return new Promise(resolve => {
+            const animate = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = elapsed / duration;
+                if (progress < 1) {
+                    this.consoleAlpha = 1 - progress;
+                    requestAnimationFrame(animate);
+                } else {
+                    this.consoleAlpha = 0;
+                    resolve();
+                }
+            };
+            animate();
+        });
+    }
+
+    drawCinematicText() {
+        // Draw CMD Window
         const ctx = this.ctx;
-        ctx.fillStyle = color;
-        ctx.font = `${size}px monospace`;
-        ctx.textBaseline = 'top';
+        ctx.save();
+        ctx.globalAlpha = this.consoleAlpha;
+        
+        // Window Position
+        const winX = 40;
+        const winY = 30;
+        const winW = RENDER_WIDTH - 80;
+        const winH = RENDER_HEIGHT - 60;
         
         // Shadow
-        ctx.fillStyle = COLORS.SHADOW_BLUE;
-        ctx.fillText(text, x + 1, y + 1);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(winX + 4, winY + 4, winW, winH);
         
-        // Main text
-        ctx.fillStyle = color;
-        ctx.fillText(text, x, y);
+        // Main Body (Match Theme Blue)
+        ctx.fillStyle = COLORS.BACKGROUND_BLUE;
+        ctx.fillRect(winX, winY, winW, winH);
+        ctx.strokeStyle = COLORS.SYSTEM_WHITE;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(winX, winY, winW, winH);
+        
+        // Title Bar
+        const titleH = 18;
+        ctx.fillStyle = COLORS.SYSTEM_WHITE; // White bar
+        ctx.fillRect(winX, winY, winW, titleH);
+        
+        ctx.fillStyle = COLORS.BACKGROUND_BLUE;
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText("C:\\WINDOWS\\system32\\cmd.exe", winX + 6, winY + titleH/2);
+        
+        // Close Button [X]
+        const btnSize = 12;
+        const btnX = winX + winW - btnSize - 3;
+        const btnY = winY + 3;
+        
+        // Save button rect for hit testing in Game.js
+        this.closeBtnRect = { x: btnX, y: btnY, w: btnSize, h: btnSize };
+        
+        ctx.strokeStyle = COLORS.BACKGROUND_BLUE;
+        ctx.strokeRect(btnX, btnY, btnSize, btnSize);
+        ctx.beginPath();
+        ctx.moveTo(btnX + 2, btnY + 2);
+        ctx.lineTo(btnX + btnSize - 2, btnY + btnSize - 2);
+        ctx.moveTo(btnX + btnSize - 2, btnY + 2);
+        ctx.lineTo(btnX + 2, btnY + btnSize - 2);
+        ctx.stroke();
+
+        // Content
+        // Ensure text stays within window
+        ctx.beginPath();
+        ctx.rect(winX, winY + titleH, winW, winH - titleH);
+        ctx.clip();
+        
+        ctx.fillStyle = '#CCCCCC'; // Light Grey Text
+        ctx.font = '12px monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        
+        const padding = 10;
+        const lineHeight = 16;
+        const startX = winX + padding;
+        const startY = winY + titleH + padding;
+        
+        this.consoleLines.forEach((line, i) => {
+            ctx.fillText(line, startX, startY + i * lineHeight);
+        });
+        
+        // Blinking Cursor
+        if (Math.floor(Date.now() / 500) % 2 === 0) {
+            const lastLine = this.consoleLines[this.consoleLines.length - 1] || "";
+            const width = ctx.measureText(lastLine).width;
+            const cursorY = startY + (Math.max(0, this.consoleLines.length - 1)) * lineHeight;
+            ctx.fillRect(startX + width + 2, cursorY, 8, 12);
+        }
+        
+        ctx.restore();
     }
 }
